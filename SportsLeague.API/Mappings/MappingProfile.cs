@@ -29,12 +29,16 @@ namespace SportsLeague.API.Mappings
             CreateMap<Tournament, TournamentResponseDTO>()
                 .ForMember(
                     dest => dest.TeamsCount,
-                    opt => opt.MapFrom(src =>
-                        src.TournamentTeams != null ? src.TournamentTeams.Count : 0));//Condicion ternanria
+                    opt => opt.MapFrom(src =>src.TournamentTeams != null ? src.TournamentTeams.Count : 0));//Condicion ternanria
 
             // Sponsor mappings
             CreateMap<Sponsor, SponsorResponseDTO>();
             CreateMap<SponsorRequestDTO, Sponsor>();
+
+            CreateMap<TournamentSponsorRequestDTO, TournamentSponsor>();
+            CreateMap<TournamentSponsor, TournamentSponsorResponseDTO>()
+                .ForMember(dest => dest.TournamentName, opt => opt.MapFrom(src => src.Tournament.Name))
+                .ForMember(dest => dest.SponsorName, opt => opt.MapFrom(src => src.Sponsor.Name));
         }
     }
 }

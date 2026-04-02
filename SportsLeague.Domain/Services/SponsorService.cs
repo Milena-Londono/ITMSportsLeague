@@ -9,11 +9,19 @@ namespace SportsLeague.Domain.Services
     public class SponsorService : ISponsorService
     {
         private readonly ISponsorRepository _sponsorRepository;
+        private readonly ITournamentSponsorRepository _tournamentSponsorRepository;
+        private readonly ITournamentRepository _tournamentRepository;
         private readonly ILogger<SponsorService> _logger;
 
-        public SponsorService(ISponsorRepository sponsorRepository, ILogger<SponsorService> logger)
+        public SponsorService(
+            ISponsorRepository sponsorRepository,
+            ITournamentSponsorRepository tournamentSponsorRepository,
+            ITournamentRepository tournamentRepository,
+            ILogger<SponsorService> logger)
         {
             _sponsorRepository = sponsorRepository;
+            _tournamentSponsorRepository = tournamentSponsorRepository;
+            _tournamentRepository = tournamentRepository;
             _logger = logger;
         }
 
@@ -30,7 +38,9 @@ namespace SportsLeague.Domain.Services
             var sponsor = await _sponsorRepository.GetByIdAsync(id);
 
             if (sponsor == null)
+            {
                 _logger.LogWarning("Sponsor with ID {SponsorId} not found", id);
+            }
 
             return sponsor;
         }
@@ -40,8 +50,10 @@ namespace SportsLeague.Domain.Services
             await ValidateSponsorAsync(sponsor);
 
             sponsor.CreatedAt = DateTime.UtcNow;
+            sponsor.UpdatedAt = null;
 
             _logger.LogInformation("Creating sponsor: {SponsorName}", sponsor.Name);
+
             return await _sponsorRepository.CreateAsync(sponsor);
         }
 
@@ -52,7 +64,7 @@ namespace SportsLeague.Domain.Services
             if (existingSponsor == null)
             {
                 _logger.LogWarning("Sponsor with ID {SponsorId} not found for update", id);
-                throw new KeyNotFoundException($"No se encontró el sponsor con ID {id}");
+                throw new KeyNotFoundException($"Sponsor with ID {id} was not found.");
             }
 
             await ValidateSponsorAsync(sponsor, id);
@@ -65,48 +77,139 @@ namespace SportsLeague.Domain.Services
             existingSponsor.UpdatedAt = DateTime.UtcNow;
 
             _logger.LogInformation("Updating sponsor with ID: {SponsorId}", id);
+
             await _sponsorRepository.UpdateAsync(existingSponsor);
         }
 
         public async Task DeleteAsync(int id)
         {
-            var exists = await _sponsorRepository.ExistsAsync(id);
+            var sponsor = await _sponsorRepository.GetByIdAsync(id);
 
-            if (!exists)
+            if (sponsor == null)
             {
                 _logger.LogWarning("Sponsor with ID {SponsorId} not found for deletion", id);
-                throw new KeyNotFoundException($"No se encontró el sponsor con ID {id}");
+                throw new KeyNotFoundException($"Sponsor with ID {id} was not found.");
             }
 
             _logger.LogInformation("Deleting sponsor with ID: {SponsorId}", id);
+
             await _sponsorRepository.DeleteAsync(id);
+        }
+
+        public async Task<IEnumerable<TournamentSponsor>> GetSponsorTournamentsAsync(int sponsorId)
+        {
+            var sponsor = await _sponsorRepository.GetByIdAsync(sponsorId);
+
+            if (sponsor == null)
+            {
+                _logger.LogWarning("Sponsor with ID {SponsorId} not found when listing tournaments", sponsorId);
+                throw new KeyNotFoundException($"Sponsor with ID {sponsorId} was not found.");
+            }
+
+            _logger.LogInformation("Retrieving tournaments for sponsor ID: {SponsorId}", sponsorId);
+
+            return await _tournamentSponsorRepository.GetBySponsorIdAsync(sponsorId);
+        }
+
+        public async Task<TournamentSponsor> LinkTournamentAsync(int sponsorId, TournamentSponsor tournamentSponsor)
+        {
+            var sponsor = await _sponsorRepository.GetByIdAsync(sponsorId);
+            if (sponsor == null)
+            {
+                _logger.LogWarning("Sponsor with ID {SponsorId} not found for linking", sponsorId);
+                throw new KeyNotFoundException($"Sponsor with ID {sponsorId} was not found.");
+            }
+
+            var tournament = await _tournamentRepository.GetByIdAsync(tournamentSponsor.TournamentId);
+            if (tournament == null)
+            {
+                _logger.LogWarning("Tournament with ID {TournamentId} not found for linking", tournamentSponsor.TournamentId);
+                throw new KeyNotFoundException($"Tournament with ID {tournamentSponsor.TournamentId} was not found.");
+            }
+
+            if (tournamentSponsor.ContractAmount <= 0)
+            {
+                throw new InvalidOperationException("Contract amount must be greater than 0.");
+            }
+
+            var existingLink = await _tournamentSponsorRepository
+                .GetBySponsorAndTournamentAsync(sponsorId, tournamentSponsor.TournamentId);
+
+            if (existingLink != null)
+            {
+                throw new InvalidOperationException("This sponsor is already linked to the selected tournament.");
+            }
+
+            tournamentSponsor.SponsorId = sponsorId;
+            tournamentSponsor.JoinedAt = DateTime.UtcNow;
+            tournamentSponsor.CreatedAt = DateTime.UtcNow;
+            tournamentSponsor.UpdatedAt = null;
+
+            _logger.LogInformation(
+                "Linking sponsor ID {SponsorId} to tournament ID {TournamentId}",
+                sponsorId,
+                tournamentSponsor.TournamentId);
+
+            return await _tournamentSponsorRepository.CreateAsync(tournamentSponsor);
+        }
+
+        public async Task UnlinkTournamentAsync(int sponsorId, int tournamentId)
+        {
+            var existingLink = await _tournamentSponsorRepository
+                .GetBySponsorAndTournamentAsync(sponsorId, tournamentId);
+
+            if (existingLink == null)
+            {
+                _logger.LogWarning(
+                    "Link between sponsor ID {SponsorId} and tournament ID {TournamentId} was not found",
+                    sponsorId,
+                    tournamentId);
+
+                throw new KeyNotFoundException(
+                    $"The link between sponsor {sponsorId} and tournament {tournamentId} was not found.");
+            }
+
+            _logger.LogInformation(
+                "Removing link between sponsor ID {SponsorId} and tournament ID {TournamentId}",
+                sponsorId,
+                tournamentId);
+
+            await _tournamentSponsorRepository.DeleteAsync(existingLink.Id);
         }
 
         private async Task ValidateSponsorAsync(Sponsor sponsor, int? sponsorId = null)
         {
             if (string.IsNullOrWhiteSpace(sponsor.Name))
-                throw new InvalidOperationException("El nombre del sponsor es obligatorio.");
+            {
+                throw new InvalidOperationException("Sponsor name is required.");
+            }
 
             if (string.IsNullOrWhiteSpace(sponsor.ContactEmail))
-                throw new InvalidOperationException("El email de contacto es obligatorio.");
+            {
+                throw new InvalidOperationException("Contact email is required.");
+            }
 
             if (!IsValidEmail(sponsor.ContactEmail))
-                throw new InvalidOperationException("El formato del email no es válido.");
+            {
+                throw new InvalidOperationException("Contact email format is invalid.");
+            }
 
-            bool exists = sponsorId.HasValue
+            bool nameExists = sponsorId.HasValue
                 ? await _sponsorRepository.ExistsByNameAsync(sponsor.Name, sponsorId.Value)
                 : await _sponsorRepository.ExistsByNameAsync(sponsor.Name);
 
-            if (exists)
-                throw new InvalidOperationException($"Ya existe un sponsor con el nombre '{sponsor.Name}'.");
+            if (nameExists)
+            {
+                throw new InvalidOperationException("A sponsor with the same name already exists.");
+            }
         }
 
         private bool IsValidEmail(string email)
         {
             try
             {
-                var mail = new MailAddress(email);
-                return mail.Address == email;
+                var mailAddress = new MailAddress(email);
+                return mailAddress.Address == email;
             }
             catch
             {

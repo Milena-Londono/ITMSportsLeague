@@ -92,5 +92,56 @@ namespace SportsLeague.API.Controllers
                 return NotFound();
             }
         }
+
+        [HttpGet("{id}/tournaments")]
+        public async Task<IActionResult> GetSponsorTournaments(int id)
+        {
+            try
+            {
+                var tournaments = await _sponsorService.GetSponsorTournamentsAsync(id);
+                var response = _mapper.Map<IEnumerable<TournamentSponsorResponseDTO>>(tournaments);
+
+                return Ok(response);
+            }
+            catch (KeyNotFoundException)
+            {
+                return NotFound();
+            }
+        }
+
+        [HttpPost("{id}/tournaments")]
+        public async Task<IActionResult> LinkTournament(int id, [FromBody] TournamentSponsorRequestDTO request)
+        {
+            try
+            {
+                var tournamentSponsor = _mapper.Map<TournamentSponsor>(request);
+                var createdLink = await _sponsorService.LinkTournamentAsync(id, tournamentSponsor);
+                var response = _mapper.Map<TournamentSponsorResponseDTO>(createdLink);
+
+                return CreatedAtAction(nameof(GetSponsorTournaments), new { id }, response);
+            }
+            catch (KeyNotFoundException)
+            {
+                return NotFound();
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Conflict(new { message = ex.Message });
+            }
+        }
+
+        [HttpDelete("{id}/tournaments/{tid}")]
+        public async Task<IActionResult> UnlinkTournament(int id, int tid)
+        {
+            try
+            {
+                await _sponsorService.UnlinkTournamentAsync(id, tid);
+                return NoContent();
+            }
+            catch (KeyNotFoundException)
+            {
+                return NotFound();
+            }
+        }
     }
 }
