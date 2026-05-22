@@ -21,6 +21,7 @@ namespace SportsLeague.DataAccess.Context
         public DbSet<MatchResult> MatchResults => Set<MatchResult>();
         public DbSet<Goal> Goals => Set<Goal>();
         public DbSet<Card> Cards => Set<Card>();
+        public DbSet<MatchLineup> MatchLineups => Set<MatchLineup>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -304,6 +305,40 @@ namespace SportsLeague.DataAccess.Context
                       .OnDelete(DeleteBehavior.Restrict);
             });
 
+            // ── MatchLineup Configuration ──
+            modelBuilder.Entity<MatchLineup>(entity =>
+            {
+                entity.HasKey(ml => ml.Id);
+
+                entity.Property(ml => ml.IsStarter)
+                      .IsRequired();
+
+                entity.Property(ml => ml.Position)
+                      .IsRequired()
+                      .HasMaxLength(50);
+
+                entity.Property(ml => ml.CreatedAt)
+                      .IsRequired();
+
+                entity.Property(ml => ml.UpdatedAt)
+                      .IsRequired(false);
+
+                // Relación con Match (Cascade: eliminar partido elimina alineaciones)
+                entity.HasOne(ml => ml.Match)
+                      .WithMany(m => m.MatchLineups) // Relación 1:N entre Match y MatchLineup
+                      .HasForeignKey(ml => ml.MatchId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                // Relación con Player (Restrict: evita eliminar jugador con alineaciones registradas)
+                entity.HasOne(ml => ml.Player)
+                      .WithMany(p => p.MatchLineups) // Relación 1:N entre Player y MatchLineup
+                      .HasForeignKey(ml => ml.PlayerId)
+                      .OnDelete(DeleteBehavior.Restrict);
+
+                // Índice único compuesto: evita registrar el mismo jugador dos veces en el mismo partido
+                entity.HasIndex(ml => new { ml.MatchId, ml.PlayerId })
+                      .IsUnique();
+            });
         }
     }
 }

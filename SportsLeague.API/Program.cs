@@ -27,6 +27,7 @@ builder.Services.AddScoped<IMatchRepository, MatchRepository>();
 builder.Services.AddScoped<IMatchResultRepository, MatchResultRepository>();
 builder.Services.AddScoped<IGoalRepository, GoalRepository>();
 builder.Services.AddScoped<ICardRepository, CardRepository>();
+builder.Services.AddScoped<IMatchLineupRepository, MatchLineupRepository>();
 
 
 // ── Services ──
